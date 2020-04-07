@@ -208,7 +208,6 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
           String baseUrl = urlObj.getProtocol() + "://" + urlObj.getHost();
           String cookie = CookieManager.getInstance().getCookie(baseUrl);
           request.addRequestHeader("Cookie", cookie);
-          System.out.println("Got cookie for DownloadManager: " + cookie);
         } catch (MalformedURLException e) {
           System.out.println("Error getting cookie for DownloadManager: " + e.toString());
           e.printStackTrace();
@@ -390,6 +389,11 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
   @ReactProp(name = "injectedJavaScript")
   public void setInjectedJavaScript(WebView view, @Nullable String injectedJavaScript) {
     ((RNCWebView) view).setInjectedJavaScript(injectedJavaScript);
+  }
+
+  @ReactProp(name = "injectedJavaScriptBeforeContentLoaded")
+  public void setInjectedJavaScriptBeforeContentLoaded(WebView view, @Nullable String injectedJavaScriptBeforeContentLoaded) {
+    ((RNCWebView) view).setInjectedJavaScriptBeforeContentLoaded(injectedJavaScriptBeforeContentLoaded);
   }
 
   @ReactProp(name = "messagingEnabled")
@@ -643,6 +647,11 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
       int initialRequestedOrientation = reactContext.getCurrentActivity().getRequestedOrientation();
       mWebChromeClient = new RNCWebChromeClient(reactContext, webView) {
         @Override
+        public Bitmap getDefaultVideoPoster() {
+          return Bitmap.createBitmap(50, 50, Bitmap.Config.ARGB_8888);
+        }
+        
+        @Override
         public void onShowCustomView(View view, CustomViewCallback callback) {
           if (mVideoView != null) {
             callback.onCustomViewHidden();
@@ -694,7 +703,12 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
       if (mWebChromeClient != null) {
         mWebChromeClient.onHideCustomView();
       }
-      mWebChromeClient = new RNCWebChromeClient(reactContext, webView);
+      mWebChromeClient = new RNCWebChromeClient(reactContext, webView) {
+        @Override
+        public Bitmap getDefaultVideoPoster() {
+          return Bitmap.createBitmap(50, 50, Bitmap.Config.ARGB_8888);
+        }
+      };
       webView.setWebChromeClient(mWebChromeClient);
     }
   }
@@ -722,6 +736,9 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
     public void onPageStarted(WebView webView, String url, Bitmap favicon) {
       super.onPageStarted(webView, url, favicon);
       mLastLoadFailed = false;
+
+      RNCWebView reactWebView = (RNCWebView) webView;
+      reactWebView.callInjectedJavaScriptBeforeContentLoaded();       
 
       dispatchEvent(
         webView,
@@ -961,6 +978,8 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
   protected static class RNCWebView extends WebView implements LifecycleEventListener {
     protected @Nullable
     String injectedJS;
+    protected @Nullable
+    String injectedJSBeforeContentLoaded;
     protected boolean messagingEnabled = false;
     protected @Nullable
     RNCWebViewClient mRNCWebViewClient;
@@ -1034,6 +1053,10 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
       injectedJS = js;
     }
 
+    public void setInjectedJavaScriptBeforeContentLoaded(@Nullable String js) {
+      injectedJSBeforeContentLoaded = js;
+    }
+
     protected RNCWebViewBridge createRNCWebViewBridge(RNCWebView webView) {
       return new RNCWebViewBridge(webView);
     }
@@ -1072,6 +1095,14 @@ public class RNCWebViewManager extends SimpleViewManager<WebView> {
         injectedJS != null &&
         !TextUtils.isEmpty(injectedJS)) {
         evaluateJavascriptWithFallback("(function() {\n" + injectedJS + ";\n})();");
+      }
+    }
+
+    public void callInjectedJavaScriptBeforeContentLoaded() {
+      if (getSettings().getJavaScriptEnabled() &&
+      injectedJSBeforeContentLoaded != null &&
+      !TextUtils.isEmpty(injectedJSBeforeContentLoaded)) {
+        evaluateJavascriptWithFallback("(function() {\n" + injectedJSBeforeContentLoaded + ";\n})();");
       }
     }
 
